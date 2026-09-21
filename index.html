@@ -291,6 +291,10 @@ code{background:var(--soft);padding:2px 5px;border-radius:4px;font-size:12px;}
       <div class="field-label">연식</div>
       <div class="chips-pick" id="year-choice" role="group" aria-label="연식"></div>
     </div>
+    <div class="field">
+      <div class="field-label">가격대</div>
+      <div class="chips-pick" id="price-choice" role="group" aria-label="가격대"></div>
+    </div>
     <div class="notice" id="notice" hidden></div>
     <button class="start" id="btn-start" type="button">시작하기</button>
     <p class="round-info" id="round-info"></p>
@@ -445,14 +449,23 @@ const BANDS = [
   {k:"2010", label:"2010~2013", test:y => y >= 2010 && y <= 2013},
   {k:"old",  label:"2009년 이전", test:y => y <= 2009}
 ];
+const PRICES = [
+  {k:"~2000",     label:"2천만원 이하", test:p => p < 20000000},
+  {k:"2000-4000", label:"2~4천만원",   test:p => p >= 20000000 && p < 40000000},
+  {k:"4000-7000", label:"4~7천만원",   test:p => p >= 40000000 && p < 70000000},
+  {k:"7000-1e",   label:"7천만~1억",   test:p => p >= 70000000 && p < 100000000},
+  {k:"1e+",       label:"1억 이상",    test:p => p >= 100000000}
+];
 let cat = "트랙터";
 let brands = new Set();      // 비어 있으면 전체
 let band = "전체";
+let price = "전체";
 
 const inCat  = x => x.cat === cat;
 const inBand = x => band === "전체" || BANDS.find(b => b.k === band).test(x.year);
 const inBrand = x => brands.size === 0 || brands.has(x.brand);
-const poolFor = () => LISTINGS.filter(x => inCat(x) && inBand(x) && inBrand(x));
+const inPrice = x => price === "전체" || PRICES.find(p => p.k === price).test(x.price);
+const poolFor = () => LISTINGS.filter(x => inCat(x) && inBand(x) && inBrand(x) && inPrice(x));
 
 function renderCats(){
   const cats = ["트랙터","콤바인","이앙기"].filter(c => LISTINGS.some(x => x.cat === c));
@@ -484,18 +497,40 @@ function renderYears(){
     }).join("");
 }
 function autoSize(n){ return n >= 32 ? 32 : n >= 16 ? 16 : n >= 8 ? 8 : 0; }
+
+function renderPrices(){
+  const base = LISTINGS.filter(x => inCat(x) && inBand(x) && inBrand(x));
+  $("price-choice").innerHTML =
+    '<button type="button" data-price="전체" aria-pressed="'+(price==="전체")+'">전체<b>'+base.length+'</b></button>' +
+    PRICES.map(o => {
+      const n = base.filter(x => o.test(x.price)).length;
+      return '<button type="button" data-price="'+o.k+'" aria-pressed="'+(price===o.k)+'"'+
+        (n===0?" disabled":"")+'>'+o.label+'<b>'+n+'</b></button>';
+    }).join("");
+}
+
 function sync(){
+  // 고른 가격대에 매물이 없어지면 전체로 되돌림
+  if(price !== "전체" && !LISTINGS.some(x => inCat(x) && inBand(x) && inBrand(x) && inPrice(x))) price = "전체";
+  renderPrices();
   const n = poolFor().length;
   size = autoSize(n);
   const short = size === 0;
   $("btn-start").disabled = short;
   $("notice").hidden = !short;
   $("round-info").textContent = short ? "" :
-    "조건에 맞는 매물 " + n + "대 · " + size + "강으로 진행합니다";
+    "조건에 맞는 매물 " + n + "대 · " + size + "강으로 진행합니다" +
+    (size === 8 ? " (7번 선택)" : size === 16 ? " (15번 선택)" : " (31번 선택)");
   if(short) $("notice").textContent =
     "조건에 맞는 매물이 " + n + "대예요. 아직 매물이 부족합니다. 8강을 시작하려면 8대 이상 필요해요.";
 }
 function refresh(){ renderBrands(); renderYears(); sync(); }
+
+$("price-choice").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b || b.disabled) return;
+  price = b.dataset.price;
+  sync();
+});
 
 $("cat-choice").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
