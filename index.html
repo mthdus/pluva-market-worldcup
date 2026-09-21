@@ -181,15 +181,44 @@ button{font-family:inherit;color:inherit;}
 .section-head{font-size:14px;font-weight:700;color:var(--ink-2);margin:38px 0 14px;}
 
 /* 갤러리 */
-.gal{margin-top:14px;}
-.gal-main{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--soft);aspect-ratio:4/3;}
-.gal-main img{width:100%;height:100%;object-fit:cover;display:block;}
+.gal{margin-top:18px;}
+.gal-head{display:flex;align-items:baseline;gap:8px;margin-bottom:9px;}
+.gal-head h3{font-size:15px;font-weight:700;letter-spacing:-.01em;}
+.gal-head span{font-size:12px;color:var(--ink-3);}
+
+.gal-stage{position:relative;border:1px solid var(--line);border-radius:14px;
+  overflow:hidden;background:var(--soft);}
+.gal-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;
+  scroll-behavior:smooth;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;-ms-overflow-style:none;}
+.gal-track::-webkit-scrollbar{display:none;}
+.gal-slide{flex:0 0 100%;scroll-snap-align:center;aspect-ratio:4/3;background:var(--soft);}
+.gal-slide img{width:100%;height:100%;object-fit:cover;display:block;}
+
+.gal-nav{position:absolute;top:50%;transform:translateY(-50%);
+  width:38px;height:38px;border-radius:50%;border:none;padding:0;cursor:pointer;
+  background:rgba(10,21,36,.55);color:#fff;font-size:22px;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s,opacity .12s;}
+.gal-nav:hover{background:rgba(10,21,36,.78);}
+.gal-nav[disabled]{opacity:.25;cursor:default;}
+.gal-nav.prev{left:9px;}
+.gal-nav.next{right:9px;}
+.gal-count{position:absolute;right:10px;bottom:10px;
+  background:rgba(10,21,36,.6);color:#fff;border-radius:999px;
+  padding:3px 10px;font-size:12px;font-family:Arial,sans-serif;
+  font-variant-numeric:tabular-nums;letter-spacing:.02em;}
+
 .gal-thumbs{display:flex;gap:8px;margin-top:9px;overflow-x:auto;padding-bottom:4px;}
 .gal-t{flex:0 0 64px;height:48px;padding:0;border:1px solid var(--line);border-radius:8px;
   overflow:hidden;background:var(--soft);cursor:pointer;opacity:.55;transition:opacity .12s,border-color .12s;}
 .gal-t.on{border-color:var(--blue);opacity:1;}
 .gal-t:hover{opacity:1;}
 .gal-t img{width:100%;height:100%;object-fit:cover;display:block;}
+@media (max-width:799px){
+  .gal-nav{width:34px;height:34px;font-size:20px;}
+  .gal-t{flex:0 0 54px;height:41px;}
+}
 
 /* 유사 매물 */
 .mini-list{display:grid;gap:10px;}
@@ -351,9 +380,19 @@ function gallery(item){
   const g = item.imgs || [];
   if(g.length < 2) return "";
   return '<div class="gal" id="gal">'+
-    '<div class="gal-main"><img id="gal-img" src="'+g[0]+'" alt=""></div>'+
+    '<div class="gal-head"><h3>매물 전체 이미지 보기</h3>'+
+      '<span>좌우로 밀어서 넘기세요</span></div>'+
+    '<div class="gal-stage">'+
+      '<div class="gal-track" id="gal-track">'+
+        g.map((u,i) => '<div class="gal-slide"><img src="'+u+'" alt="" '+
+          (i===0?'':'loading="lazy" ')+'></div>').join("")+
+      '</div>'+
+      '<button type="button" class="gal-nav prev" id="gal-prev" aria-label="이전 사진" disabled>&#8249;</button>'+
+      '<button type="button" class="gal-nav next" id="gal-next" aria-label="다음 사진">&#8250;</button>'+
+      '<div class="gal-count"><b id="gal-i">1</b> / '+g.length+'</div>'+
+    '</div>'+
     '<div class="gal-thumbs">'+ g.map((u,i) =>
-      '<button type="button" class="gal-t'+(i===0?" on":"")+'" data-src="'+u+'"><img src="'+u+'" alt="" loading="lazy"></button>'
+      '<button type="button" class="gal-t'+(i===0?" on":"")+'" data-i="'+i+'"><img src="'+u+'" alt="" loading="lazy"></button>'
     ).join("") +'</div>'+
   '</div>';
 }
@@ -514,16 +553,50 @@ document.addEventListener("keydown", e => {
   if(e.key === "ArrowRight" || e.key === "2") pick(1);
 });
 
+function initGallery(gw){
+  const track = gw.querySelector("#gal-track");
+  const prev  = gw.querySelector("#gal-prev");
+  const next  = gw.querySelector("#gal-next");
+  const label = gw.querySelector("#gal-i");
+  const thumbs = [].slice.call(gw.querySelectorAll(".gal-t"));
+  const last = thumbs.length - 1;
+  let cur = 0;
+
+  function go(i){
+    i = Math.max(0, Math.min(last, i));
+    track.scrollTo({ left: i * track.clientWidth, behavior: "smooth" });
+  }
+  function sync(){
+    const i = Math.round(track.scrollLeft / track.clientWidth);
+    if(i === cur) return;
+    cur = i;
+    label.textContent = i + 1;
+    thumbs.forEach((t, n) => t.classList.toggle("on", n === i));
+    prev.disabled = (i === 0);
+    next.disabled = (i === last);
+  }
+
+  prev.addEventListener("click", () => go(cur - 1));
+  next.addEventListener("click", () => go(cur + 1));
+  gw.addEventListener("click", e => {
+    const b = e.target.closest(".gal-t"); if(!b) return;
+    go(+b.dataset.i);
+  });
+
+  let tick;
+  track.addEventListener("scroll", () => {
+    clearTimeout(tick); tick = setTimeout(sync, 60);
+  }, { passive: true });
+  window.addEventListener("resize", () => {
+    track.scrollLeft = cur * track.clientWidth;
+  });
+}
+
 function finish(w){
   $("card-winner").innerHTML = cardHTML(w);
   $("gal-wrap").innerHTML = gallery(w);
   const gw = $("gal");
-  if(gw) gw.addEventListener("click", e => {
-    const b = e.target.closest(".gal-t"); if(!b) return;
-    $("gal-img").src = b.dataset.src;
-    gw.querySelectorAll(".gal-t").forEach(x => x.classList.remove("on"));
-    b.classList.add("on");
-  });
+  if(gw) initGallery(gw);
   $("result-meta").textContent = roundName(size)+" · "+log.length+"번의 선택 끝에 남은 한 대";
   if(w.url){ $("btn-detail").href = w.url; $("btn-detail").hidden = false; }
   else { $("btn-detail").hidden = true; }
